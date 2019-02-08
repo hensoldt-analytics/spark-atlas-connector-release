@@ -29,7 +29,6 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.model.typedef.AtlasTypesDef
 import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.scalatest.concurrent.Eventually._
@@ -54,7 +53,6 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
   }
 
   override protected def afterAll(): Unit = {
-    sparkSession.sessionState.catalog.reset()
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
@@ -78,17 +76,13 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
 
     val tempPath = Files.createTempDirectory("db_")
     val dbDefinition = createDB("db1", tempPath.normalize().toUri.toString)
-    SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = false)
-    processor.pushEvent(CreateDatabasePreEvent("db1"))
+    SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.createEntityCall.size > 0)
       assert(atlasClient.createEntityCall(processor.dbType) == 1)
     }
 
-    // SAC-97: Spark delete the table before SAC receives the message.
-    sparkSession.sessionState.catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
-    processor.pushEvent(DropDatabasePreEvent("db1"))
     processor.pushEvent(DropDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.deleteEntityCall.size > 0)
@@ -106,10 +100,6 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       processor.atlasClient should not be (null)
       atlasClient = processor.atlasClient.asInstanceOf[FirehoseAtlasClient]
     }
-
-    val tempPath = Files.createTempDirectory("db_")
-    val dbDefinition = createDB("db1", tempPath.normalize().toUri.toString)
-    SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = false)
 
     val tableDefinition =
       createTable("db1", "tbl1", new StructType().add("id", LongType), CatalogStorageFormat.empty)
@@ -132,9 +122,6 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) == 1)
     }
 
-    // SAC-97: Spark delete the table before SAC receives the message.
-    val t = TableIdentifier("tbl2", Some("db1"))
-    sparkSession.sessionState.catalog.dropTable(t, ignoreIfNotExists = false, purge = true)
     processor.pushEvent(DropTablePreEvent("db1", "tbl2"))
     processor.pushEvent(DropTableEvent("db1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
