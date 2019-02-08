@@ -43,14 +43,14 @@ class SparkCatalogEventProcessor(
         val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
         val entities = dbToEntities(dbDefinition)
         atlasClient.createEntities(entities)
-        logDebug(s"Created db entity $db")
+        logInfo(s"Created db entity $db")
 
       case DropDatabasePreEvent(db) =>
         try {
           cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
         } catch {
           case _: NoSuchDatabaseException =>
-            logDebug(s"Spark already deleted the database: $db")
+            logInfo(s"Spark already deleted the database: $db")
         }
 
       case DropDatabaseEvent(db) =>
@@ -63,7 +63,7 @@ class SparkCatalogEventProcessor(
           atlasClient.deleteEntityWithUniqueAttr(pathEntity.getTypeName, path)
         }
 
-        logDebug(s"Deleted db entity $db")
+        logInfo(s"Deleted db entity $db")
 
       case CreateTablePreEvent(_, _) => // No-op
 
@@ -72,7 +72,7 @@ class SparkCatalogEventProcessor(
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
         val tableEntities = tableToEntities(tableDefinition)
         atlasClient.createEntities(tableEntities)
-        logDebug(s"Created table entity $table")
+        logInfo(s"Created table entity $table")
 
       case DropTablePreEvent(db, table) =>
         try {
@@ -81,7 +81,7 @@ class SparkCatalogEventProcessor(
             tableUniqueAttribute(db, table, isHiveTable(tableDefinition)), tableDefinition)
         } catch {
           case _: NoSuchTableException =>
-            logDebug(s"Spark already deleted the table: $db.$table")
+            logInfo(s"Spark already deleted the table: $db.$table")
         }
 
       case DropTableEvent(db, table) =>
@@ -89,7 +89,7 @@ class SparkCatalogEventProcessor(
         atlasClient.deleteEntityWithUniqueAttr(
           tableType(true),
           tableUniqueAttribute(db, table, true))
-        logDebug(s"Deleted table entity $table")
+        logInfo(s"Deleted table entity $table")
 
         // Try to delete the related entities from Spark-side
         cachedObject.remove(tableUniqueAttribute(db, table, isHiveTable = true))
@@ -100,11 +100,11 @@ class SparkCatalogEventProcessor(
 
             atlasClient.deleteEntityWithUniqueAttr(
               storageFormatType(isHiveTbl), storageFormatUniqueAttribute(db, table, isHiveTbl))
-            logDebug(s"Deleted storage entity for $db.$table")
+            logInfo(s"Deleted storage entity for $db.$table")
             tblDef.schema.foreach { f =>
               atlasClient.deleteEntityWithUniqueAttr(
                 columnType(isHiveTbl), columnUniqueAttribute(db, table, f.name, isHiveTbl))
-              logDebug(s"Deleted column entity $db.$table.${f.name}")
+              logInfo(s"Deleted column entity $db.$table.${f.name}")
             }
 
           }
@@ -143,13 +143,13 @@ class SparkCatalogEventProcessor(
           tableUniqueAttribute(db, name, isHiveTbl),
           tableEntity)
 
-        logDebug(s"Rename table entity $name to $newName")
+        logInfo(s"Rename table entity $name to $newName")
 
       case AlterDatabaseEvent(db) =>
         val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
         val dbEntities = dbToEntities(dbDefinition)
         atlasClient.createEntities(dbEntities)
-        logDebug(s"Updated DB properties")
+        logInfo(s"Updated DB properties")
 
       case AlterTableEvent(db, table, kind) =>
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
@@ -157,7 +157,7 @@ class SparkCatalogEventProcessor(
           case "table" =>
             val tableEntities = tableToEntities(tableDefinition)
             atlasClient.createEntities(tableEntities)
-            logDebug(s"Updated table entity $table")
+            logInfo(s"Updated table entity $table")
 
           case "dataSchema" =>
             val isHiveTbl = isHiveTable(tableDefinition)
@@ -171,7 +171,7 @@ class SparkCatalogEventProcessor(
               tableType(isHiveTbl),
               tableUniqueAttribute(db, table, isHiveTbl),
               tableEntity)
-            logDebug(s"Updated table schema")
+            logInfo(s"Updated table schema")
 
           case "stats" =>
             logDebug(s"Stats update will not be tracked here")
@@ -181,7 +181,7 @@ class SparkCatalogEventProcessor(
         }
 
       case f =>
-        logDebug(s"Drop unknown event $f")
+        logInfo(s"Drop unknown event $f")
     }
   }
 }
