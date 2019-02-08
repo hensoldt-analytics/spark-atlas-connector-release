@@ -17,6 +17,8 @@
 
 package com.hortonworks.spark.atlas
 
+import java.util
+
 import org.apache.atlas.ApplicationProperties
 import com.hortonworks.spark.atlas.AtlasClientConf.ConfigEntry
 
@@ -53,8 +55,6 @@ class AtlasClientConf {
 
 object AtlasClientConf {
   case class ConfigEntry(key: String, defaultValue: String)
-
-  val ATLAS_SPARK_ENABLED = ConfigEntry("atlas.spark.enabled", "true")
 
   val ATLAS_REST_ENDPOINT = ConfigEntry("atlas.rest.address", "localhost:21000")
 
