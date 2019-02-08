@@ -52,6 +52,10 @@ class SparkExecutionPlanProcessor(
             logDebug(s"LOAD DATA [LOCAL] INPATH (${c.path}) ${c.table}")
             CommandsHarvester.LoadDataHarvester.harvest(c, qd)
 
+          case c: CreateDataSourceTableAsSelectCommand =>
+            logDebug(s"CREATE TABLE USING xx AS SELECT query: ${qd.qe}")
+            CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(c, qd)
+
           case c: CreateViewCommand =>
             logDebug(s"CREATE VIEW AS SELECT query: ${qd.qe}")
             CommandsHarvester.CreateViewHarvester.harvest(c, qd)
@@ -77,10 +81,6 @@ class SparkExecutionPlanProcessor(
           case c: CreateHiveTableAsSelectCommand =>
             logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
             CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
-
-          case c: CreateDataSourceTableAsSelectCommand =>
-            logDebug(s"CREATE TABLE USING xx AS SELECT query: ${qd.qe}")
-            CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(c, qd)
 
           case _ =>
             Seq.empty
