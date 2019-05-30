@@ -17,7 +17,8 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
-import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+import com.hortonworks.spark.atlas.TestUtils
+import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 import org.scalatest.FunSuite
 import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
@@ -45,5 +46,12 @@ trait KafkaTopicEntityValidator extends FunSuite {
       expectedClusterNames)
     assert(kafkaTopicEntities.map(getStringAttribute(_, "qualifiedName")).toSet ===
       expectedQualifiedNames)
+  }
+
+  def assertEntitiesAreSubsetOfTopics(
+      topics: Seq[KafkaTopicInformation], entities: Seq[AtlasEntity]): Unit = {
+    TestUtils.assertSubsetOf(
+      topics.map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet,
+      entities.map(getStringAttribute(_, "qualifiedName")).toSet)
   }
 }
