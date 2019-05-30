@@ -22,13 +22,14 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.util.Random
 import org.apache.atlas.AtlasClient
-import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.instance.AtlasObjectId
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExecutedCommandExec}
 import org.scalatest.{FunSuite, Matchers}
 
-import com.hortonworks.spark.atlas.types.external
 import com.hortonworks.spark.atlas.WithHiveSupport
 
+import com.hortonworks.spark.atlas.types.external
+import com.hortonworks.spark.atlas._
 
 class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
   private val sourceTblName = "source_" + Random.nextInt(100000)
@@ -53,25 +54,30 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     val cmd = node.cmd.asInstanceOf[CreateViewCommand]
 
     val entities = CommandsHarvester.CreateViewHarvester.harvest(cmd, qd)
-    val pEntity = entities.head
+    val pEntity = entities.head.entity
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
-    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
+    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     inputs.size() should be (1)
 
     val inputTbl = inputs.asScala.head
-    inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    inputTbl.getAttribute("name") should be (sourceTblName)
-    inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should be (
+    val inputEntity = TestUtils.findEntity(entities.head.dependencies, inputTbl).get
+
+    inputEntity.entity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
+    inputEntity.entity.getAttribute("name") should be (sourceTblName)
+    inputEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should be (
       s"default.$sourceTblName@primary")
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
-    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
+    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
     outputs.size() should be (1)
+
     val outputView = outputs.asScala.head
-    outputView.getAttribute("name") should be (destinationViewName)
-    outputView.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
-      s"default.$destinationViewName")
+    val outputEntity = TestUtils.findEntity(entities.head.dependencies, outputView).get
+
+    outputEntity.entity.getAttribute("name") should be (destinationViewName)
+    outputEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should
+      endWith (s"default.$destinationViewName")
   }
 
   test("CREATE VIEW without source") {
@@ -85,16 +91,20 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     val cmd = node.cmd.asInstanceOf[CreateViewCommand]
 
     val entities = CommandsHarvester.CreateViewHarvester.harvest(cmd, qd)
-    val pEntity = entities.head
+    val pEntity = entities.head.entity
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
-    assert(pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]].size() == 0)
+    assert(pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]].size() == 0)
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
-    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
+    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
     outputs.size() should be (1)
+
     val outputView = outputs.asScala.head
-    outputView.getAttribute("name") should be (destinationViewName2)
-    outputView.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
-      s"default.$destinationViewName2")
+    val outputEntity = TestUtils.findEntity(entities.head.dependencies, outputView).get
+
+    outputView.getUniqueAttributes.get(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should
+      endWith (s"default.$destinationViewName2")
+
+    outputEntity.entity.getAttribute("name") should be (destinationViewName2)
   }
 }
