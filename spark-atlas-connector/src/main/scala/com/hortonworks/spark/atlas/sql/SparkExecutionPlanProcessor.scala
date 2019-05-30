@@ -27,7 +27,6 @@ import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
-import org.apache.spark.sql.kafka010.KafkaStreamWriter
 
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.types.{external, metadata}
@@ -103,12 +102,8 @@ class SparkExecutionPlanProcessor(
           case w: InternalRowMicroBatchWriter
               if w.createInternalRowWriterFactory()
                 .getClass.toString.endsWith("KafkaStreamWriterFactory") =>
-            val (isKafkaWriter, topic) = KafkaHarvester.extractTopic(w)
-            if (isKafkaWriter) {
-              KafkaHarvester.harvest(topic, r, qd)
-            } else {
-              Seq.empty
-            }
+            val topic = KafkaHarvester.extractTopic(w)
+            KafkaHarvester.harvest(topic, r, qd)
 
           case w: DataSourceWriter =>
             HWCSupport.extract(r, qd).getOrElse(Seq.empty)

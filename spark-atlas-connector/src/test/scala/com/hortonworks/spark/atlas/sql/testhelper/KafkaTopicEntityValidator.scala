@@ -17,22 +17,33 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 import org.scalatest.FunSuite
-
 import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
-
 import org.apache.atlas.model.instance.AtlasEntity
 
 trait KafkaTopicEntityValidator extends FunSuite {
 
-  def assertEntitiesKafkaTopicType(topics: Seq[String], entities: Set[AtlasEntity]): Unit = {
+  def assertEntitiesKafkaTopicType(
+      topics: Seq[KafkaTopicInformation],
+      entities: Set[AtlasEntity]): Unit = {
     val kafkaTopicEntities = listAtlasEntitiesAsType(entities.toSeq, KAFKA_TOPIC_STRING)
     assert(kafkaTopicEntities.size === topics.size)
 
-    assert(kafkaTopicEntities.map(getStringAttribute(_, "name")).toSet === topics.toSet)
-    assert(kafkaTopicEntities.map(getStringAttribute(_, "topic")).toSet === topics.toSet)
-    assert(kafkaTopicEntities.map(getStringAttribute(_, "uri")).toSet === topics.toSet)
-  }
+    val expectedTopicNames = topics.map(_.topicName).toSet
+    val expectedClusterNames = topics.map(_.clusterName.getOrElse("primary")).toSet
+    val expectedQualifiedNames = topics.map { ti =>
+      KafkaTopicInformation.getQualifiedName(ti, "primary")
+    }.toSet
 
+    assert(kafkaTopicEntities.map(_.getAttribute("name").toString()).toSet === expectedTopicNames)
+    assert(kafkaTopicEntities.map(_.getAttribute("topic").toString()).toSet ===
+      expectedTopicNames)
+    assert(kafkaTopicEntities.map(getStringAttribute(_, "uri")).toSet === expectedTopicNames)
+    assert(kafkaTopicEntities.map(getStringAttribute(_, "clusterName")).toSet ===
+      expectedClusterNames)
+    assert(kafkaTopicEntities.map(getStringAttribute(_, "qualifiedName")).toSet ===
+      expectedQualifiedNames)
+  }
 }

@@ -58,7 +58,7 @@ class KafkaHarvesterSuite extends StreamTest {
     val microBatchWriter = new InternalRowMicroBatchWriter(0L, writer)
 
     assert(KafkaHarvester.extractTopic(microBatchWriter) ===
-      (true, Some(KafkaTopicInformation(topic.get, None))))
+      Some(KafkaTopicInformation(topic.get, None)))
   }
 
   test("Extract Kafka topic from InternalRowMicroBatchWriter - custom atlas cluster name") {
@@ -72,14 +72,14 @@ class KafkaHarvesterSuite extends StreamTest {
     val microBatchWriter = new InternalRowMicroBatchWriter(0L, writer)
 
     assert(KafkaHarvester.extractTopic(microBatchWriter) ===
-      (true, Some(KafkaTopicInformation(topic.get, Some(customAtlasClusterName)))))
+      Some(KafkaTopicInformation(topic.get, Some(customAtlasClusterName))))
   }
 
   test("No Kafka topic information in WriterFactory") {
     val writer = new FakeStreamWriter()
     val microBatchWriter = new InternalRowMicroBatchWriter(0L, writer)
 
-    assert(KafkaHarvester.extractTopic(microBatchWriter) === (false, None))
+    assert(KafkaHarvester.extractTopic(microBatchWriter) === None)
   }
 
   private class FakeStreamWriter extends StreamWriter with SupportsWriteInternalRow {
