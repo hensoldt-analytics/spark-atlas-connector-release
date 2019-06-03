@@ -17,6 +17,7 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import com.hortonworks.spark.atlas.sql.CommandsHarvester.WriteToDataSourceV2Harvester
@@ -28,10 +29,9 @@ import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
-import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf, AtlasUtils}
+import com.hortonworks.spark.atlas._
 import com.hortonworks.spark.atlas.utils.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.SinkProgress
@@ -42,7 +42,8 @@ case class QueryDetail(
     qe: QueryExecution,
     executionId: Long,
     query: Option[String] = None,
-    sink: Option[SinkProgress] = None)
+    sink: Option[SinkProgress] = None,
+    queryId: Option[UUID] = None)
 
 object QueryDetail {
   def fromQueryExecutionListener(qe: QueryExecution, durationNs: Long): QueryDetail = {
@@ -51,7 +52,7 @@ object QueryDetail {
 
   def fromStreamingQueryListener(qe: StreamExecution, event: QueryProgressEvent): QueryDetail = {
     QueryDetail(qe.lastExecution, AtlasUtils.issueExecutionId(), None,
-      Some(event.progress.sink))
+      Some(event.progress.sink), Some(qe.id))
   }
 }
 
@@ -59,6 +60,8 @@ class SparkExecutionPlanProcessor(
     private[atlas] val atlasClient: AtlasClient,
     val conf: AtlasClientConf)
   extends AbstractEventProcessor[QueryDetail] with Logging {
+
+  val createReqHelper = new AtlasEntityCreationRequestHelper(atlasClient)
 
   // TODO: We should handle OVERWRITE to remove the old lineage.
   // TODO: We should consider LLAPRelation later
@@ -142,19 +145,18 @@ class SparkExecutionPlanProcessor(
         //        if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
         //      println("close hive connection via " + r.relation.getClass.getCanonicalName)
 
-      } ++ {
-        qd.qe.sparkPlan match {
-          case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
-            CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
-              d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
+    } ++ {
+      qd.qe.sparkPlan match {
+        case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
+          CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
+            d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
 
-          case _ =>
-            Seq.empty
-        }
+        case _ =>
+          Seq.empty
       }
+    }
 
-      atlasClient.createEntitiesWithDependencies(entities)
-      logDebug(s"Created entities without columns")
+    createReqHelper.requestCreation(entities, qd.queryId)
   }
 }
 
