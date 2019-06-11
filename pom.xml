@@ -29,12 +29,12 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>1.8</java.version>
-    <spark.version>2.3.2.3.0.3.0-SNAPSHOT</spark.version>
-    <atlas.version>1.1.0.3.0.3.0-SNAPSHOT</atlas.version>
+    <spark.version>2.3.2.3.1.4.0-SNAPSHOT</spark.version>
+    <atlas.version>1.1.0.3.1.4.0-SNAPSHOT</atlas.version>
     <maven.version>3.3.9</maven.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.12</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
-    <kafka.version>2.0.0.3.0.3.0-SNAPSHOT</kafka.version>
+    <kafka.version>2.0.0.3.1.4.0-SNAPSHOT</kafka.version>
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
     <minJavaVersion>1.8</minJavaVersion>
@@ -44,6 +44,7 @@
     <mockito.version>1.10.19</mockito.version>
     <integration.test.enabled>false</integration.test.enabled>
     <jersey.version>1.19</jersey.version>
+    <spring.version>4.3.20.RELEASE</spring.version>
   </properties>
 
   <modules>
@@ -176,10 +177,28 @@
       <version>1.12.5</version>
     </dependency>
 
+    <!-- Below spring dependencies are to upgrade spring artifacts pulled from atlas -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-beans</artifactId>
+      <version>${spring.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <version>${spring.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.atlas</groupId>
       <artifactId>atlas-notification</artifactId>
       <version>${atlas.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.springframework</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
