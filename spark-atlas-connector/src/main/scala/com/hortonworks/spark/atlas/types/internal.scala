@@ -17,17 +17,16 @@
 
 package com.hortonworks.spark.atlas.types
 
+import com.hortonworks.spark.atlas.AtlasUtils
+import com.hortonworks.spark.atlas.types.external.{HIVE_DB_TYPE_STRING, HIVE_STORAGEDESC_TYPE_STRING, HIVE_TABLE_TYPE_STRING}
+
 import scala.collection.mutable
 import scala.collection.JavaConverters._
-
-import org.apache.atlas.AtlasClientV2
+import org.apache.atlas.AtlasConstants
 import org.apache.atlas.model.instance.AtlasEntity
-
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.ml.{Pipeline, PipelineModel}
-
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object internal extends Logging {
@@ -36,17 +35,20 @@ object internal extends Logging {
 
   def sparkDbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
-  def sparkDbToEntities(dbDefinition: CatalogDatabase, owner: String): Seq[AtlasEntity] = {
+  def sparkDbToEntities(dbDefinition: CatalogDatabase, cluster: String, owner: String)
+    : Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
     val pathEntity = external.pathToEntity(dbDefinition.locationUri.toString)
 
     dbEntity.setAttribute(
       "qualifiedName", sparkDbUniqueAttribute(dbDefinition.name))
+    dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("name", dbDefinition.name)
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("locationUri", pathEntity)
     dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
+    dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity, pathEntity)
   }
 
@@ -84,8 +86,8 @@ object internal extends Logging {
       val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
 
       entity.setAttribute("qualifiedName",
-        sparkColumnUniqueAttribute(db, table, struct.name))
-      entity.setAttribute("name", struct.name)
+        sparkColumnUniqueAttribute(db, table, struct.name.toLowerCase))
+      entity.setAttribute("name", struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("nullable", struct.nullable)
       entity.setAttribute("metadata", struct.metadata.toString())
@@ -98,13 +100,15 @@ object internal extends Logging {
   }
 
   def sparkTableToEntities(
-      tableDefinition: CatalogTable,
+      tblDefination: CatalogTable,
+      clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefination)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = sparkDbToEntities(dbDefinition, tableDefinition.owner)
+    val dbEntities = sparkDbToEntities(dbDefinition, clusterName, tableDefinition.owner)
     val sdEntities =
       sparkStorageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
     val schemaEntities =
@@ -115,22 +119,40 @@ object internal extends Logging {
     tblEntity.setAttribute("qualifiedName",
       sparkTableUniqueAttribute(db, tableDefinition.identifier.table))
     tblEntity.setAttribute("name", tableDefinition.identifier.table)
-    tblEntity.setAttribute("database", dbEntities.head)
+    tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("storage", sdEntities.head)
+    tblEntity.setAttribute("sd", sdEntities.head)
     tblEntity.setAttribute("spark_schema", schemaEntities.asJava)
     tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
     tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(
       b => tblEntity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
     tblEntity.setAttribute("owner", tableDefinition.owner)
+    tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", tableDefinition.createTime)
-    tblEntity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
     tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+
+  def sparkTableToEntitiesForAlterTable(
+      tblDefination: CatalogTable,
+      clusterName: String,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val typesToPick = Seq(metadata.TABLE_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
+    val entities = sparkTableToEntities(tblDefination, clusterName, mockDbDefinition)
+
+    val dbEntity = entities.filter(e => e.getTypeName.equals(metadata.DB_TYPE_STRING)).head
+    val sdEntity = entities.filter(e => e.getTypeName.equals(metadata.STORAGEDESC_TYPE_STRING)).head
+    val tableEntity = entities.filter(e => e.getTypeName.equals(metadata.TABLE_TYPE_STRING)).head
+
+    // override attribute with reference - Atlas should already have these entities
+    tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    entities.filter(e => typesToPick.contains(e.getTypeName))
   }
 
   def sparkProcessUniqueAttribute(executionId: Long): String = {

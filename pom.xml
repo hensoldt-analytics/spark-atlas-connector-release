@@ -31,7 +31,7 @@
     <java.version>1.8</java.version>
     <spark.version>2.3.2.3.1.5.0-SNAPSHOT</spark.version>
     <atlas.version>1.1.0.3.1.5.0-SNAPSHOT</atlas.version>
-    <maven.version>3.3.9</maven.version>
+    <maven.version>3.5.4</maven.version>
     <scala.version>2.11.12</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <kafka.version>2.0.0.3.1.5.0-SNAPSHOT</kafka.version>
@@ -45,6 +45,7 @@
     <integration.test.enabled>false</integration.test.enabled>
     <jersey.version>1.19</jersey.version>
     <spring.version>4.3.20.RELEASE</spring.version>
+    <scoverage.plugin.version>1.3.0</scoverage.plugin.version>
   </properties>
 
   <modules>
@@ -247,6 +248,7 @@
   </dependencies>
 
   <build>
+    <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
     <pluginManagement>
       <plugins>
 
@@ -562,6 +564,15 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.scoverage</groupId>
+        <artifactId>scoverage-maven-plugin</artifactId>
+        <version>${scoverage.plugin.version}</version>
+        <configuration>
+          <highlighting>true</highlighting>
+        </configuration>
       </plugin>
     </plugins>
   </build>

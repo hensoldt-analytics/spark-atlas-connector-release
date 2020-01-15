@@ -23,7 +23,6 @@ import java.nio.file.Files
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
-
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.model.typedef.AtlasTypesDef
@@ -31,10 +30,9 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
-
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, TestUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
@@ -112,7 +110,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = false)
 
     val tableDefinition =
-      createTable("db1", "tbl1", new StructType().add("id", LongType), CatalogStorageFormat.empty)
+      createTable("db1", "tbl1", new StructType().add("ID", LongType), CatalogStorageFormat.empty)
     val isHiveTbl = processor.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateTableEvent("db1", "tbl1"))
@@ -122,6 +120,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 1)
       if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
         assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) == 1)
+        assert("id" === atlasClient.processedEntity.getAttribute("name"))
         assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
       }
     }
@@ -134,6 +133,37 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
         assert(atlasClient.updateEntityCall(processor.columnType(isHiveTbl)) == 1)
       }
       assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) == 1)
+    }
+
+    val renamedTableDef = SparkUtils.getExternalCatalog().getTable("db1", "tbl2")
+
+    val newSchema = renamedTableDef.schema.add("COL1", StringType)
+    val newTableDefinition = renamedTableDef.copy(schema = newSchema)
+    SparkUtils.getExternalCatalog().alterTable(newTableDefinition)
+    processor.pushEvent(AlterTableEvent("db1", "tbl2", "table"))
+    eventually(timeout(30 seconds), interval(100 milliseconds)) {
+      // no creation on db type and storage format entities
+      assert(atlasClient.createEntityCall(processor.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+
+      assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
+      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+        assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) >= 2)
+        assert("col1" === atlasClient.processedEntity.getAttribute("name"))
+        assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 2)
+      }
+    }
+
+    processor.pushEvent(AlterTableEvent("db1", "tbl2", "dataSchema"))
+    eventually(timeout(30 seconds), interval(100 milliseconds)) {
+      // no creation on db type and storage format entities
+      assert(atlasClient.createEntityCall(processor.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+
+      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+        assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) >= 2)
+        assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) >= 2)
+      }
     }
 
     // SAC-97: Spark delete the table before SAC receives the message.
@@ -183,5 +213,6 @@ class FirehoseAtlasClient(conf: AtlasClientConf) extends AtlasClient {
       attribute: String): Unit = {
     deleteEntityCall(entityType) = deleteEntityCall.getOrElse(entityType, 0) + 1
   }
+
 }
 

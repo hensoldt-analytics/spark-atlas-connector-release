@@ -43,7 +43,7 @@ trait AtlasEntityUtils {
     if (SparkUtils.isHiveEnabled()) {
       external.hiveDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
     } else {
-      internal.sparkDbToEntities(dbDefinition, SparkUtils.currUser())
+      internal.sparkDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
     }
   }
 
@@ -132,7 +132,17 @@ trait AtlasEntityUtils {
     if (isHiveTable(tableDefinition)) {
       external.hiveTableToEntities(tableDefinition, clusterName, mockDbDefinition)
     } else {
-      internal.sparkTableToEntities(tableDefinition, mockDbDefinition)
+      internal.sparkTableToEntities(tableDefinition, clusterName, mockDbDefinition)
+    }
+  }
+
+  def tableToEntitiesForAlterTable(
+      tableDefinition: CatalogTable,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    if (isHiveTable(tableDefinition)) {
+      external.hiveTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
+    } else {
+      internal.sparkTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
     }
   }
 
@@ -161,4 +171,15 @@ trait AtlasEntityUtils {
 
   def processUniqueAttribute(executionId: Long): String =
     internal.sparkProcessUniqueAttribute(executionId)
+
+  // If there is cycle, return empty output entity list
+  def cleanOutput(inputs: Seq[AtlasEntity], outputs: Seq[AtlasEntity]): List[AtlasEntity] = {
+    val qualifiedNames = inputs.map(e => e.getAttribute("qualifiedName"))
+    val isCycle = outputs.exists(x => qualifiedNames.contains(x.getAttribute("qualifiedName")))
+    if (isCycle) {
+      List.empty
+    } else {
+      outputs.toList
+    }
+  }
 }

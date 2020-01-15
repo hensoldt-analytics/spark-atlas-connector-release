@@ -34,8 +34,8 @@ To use it, you will need to make this jar accessible in Spark Driver, also confi
 
 ```
 spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
-
 spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
+spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker
 ```
 
 For example, when you're using spark-shell, you can start the Spark like:
@@ -43,12 +43,34 @@ For example, when you're using spark-shell, you can start the Spark like:
 ```shell
 bin/spark-shell --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \
 --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
---conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
+--conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
+--conf spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker
 ```
 
 Also make sure atlas configuration file `atlas-application.properties` is in the Driver's classpath. For example, putting this file into `<SPARK_HOME>/conf`.
 
 If you're using cluster mode, please also ship this conf file to the remote Drive using `--files atlas-application.properties`.
+
+Spark Atlas Connector supports two types of Atlas clients, "kafka" and "rest". You can configure which type of client via setting `atlas.client.type` to whether `kafka` or `rest`.
+The default value is `kafka` which provides stable and secured way of publishing changes. Atlas has embedded Kafka instance so you can test it out in test environment, but it's encouraged to use external kafka cluster in production. If you don't have Kafka cluster in production, you may want to set client to `rest`.
+
+Pre-create Atlas models
+=======================
+
+Spark Atlas Connector checks and creates Atlas models when starting up to ensure all necessary models are created before pushing metadata changes. Since it is only needed for the first time, Spark Atlas Connector provides the way to pre-create Atlas models.
+
+Suppose Spark is installed in `<spark dist>` directory and `atlas-application.properties` is placed on `<spark dist>/conf` directory:
+
+```shell
+java -cp "<spark dist>/jars/*:<spark dist>/conf:spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar" com.hortonworks.spark.atlas.types.SparkAtlasModel --interactive-auth
+```
+
+The tool will leverage REST client API to request to Atlas which requires authentication. Auth. information is read from `atlas-application.properties`, which should be stored as plain text.
+(It would be same if you decide to leverage REST client API in SAC itself.)
+
+Given the approach is insecure regardless of security mode of cluster, we strongly encourage you to pass `--interactive-auth` as parameter, which asks you to input username and password of Atlas interactively.
+
+After running above command, you can set `atlas.client.checkModelInStart=false` in `atlas-application.properties` to skip checking and creating models in Spark Atlas Connector's startup.
 
 To Use it in Secure Environment
 ===
@@ -73,8 +95,10 @@ When running on cluster node, you will also need to distribute this keytab, belo
 
 ```shell
  ./bin/spark-submit --class <class_name> \
-  --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \ --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
+  --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \
+  --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
   --conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
+  --conf spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker \
   --master yarn-cluster \
   --principal spark-test@EXAMPLE.COM \
   --keytab ./spark.headless.keytab \

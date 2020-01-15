@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas.types
 
 import com.google.common.collect.{ImmutableMap, ImmutableSet}
+import org.apache.atlas.AtlasConstants
 import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasLongType, AtlasStringType}
 import org.apache.atlas.`type`.{AtlasArrayType, AtlasMapType, AtlasTypeUtil}
 import org.apache.atlas.model.typedef.AtlasStructDef.AtlasConstraintDef
@@ -43,6 +44,7 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef(
@@ -67,7 +69,7 @@ object metadata {
       "table",
       TABLE_TYPE_STRING,
       AtlasConstraintDef.CONSTRAINT_TYPE_INVERSE_REF,
-      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "storage")))
+      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "sd")))
 
   // ========= Column type =========
   val COLUMN_TYPE = AtlasTypeUtil.createClassTypeDef(
@@ -94,10 +96,10 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("database", DB_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("db", DB_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
-      "storage", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
+      "sd", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "spark_schema",
       "array<spark_column>",
@@ -108,8 +110,8 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef(
       "bucketSpec", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef("owner", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("ownerType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("createTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("lastAccessTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef(
       "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef("comment", new AtlasStringType),

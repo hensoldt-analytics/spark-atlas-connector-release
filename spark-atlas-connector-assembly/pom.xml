@@ -81,6 +81,20 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
               </transformers>
+              <relocations>
+                <relocation>
+                  <pattern>org.apache.hadoop.hbase</pattern>
+                  <shadedPattern>org.apache.atlas.hbase</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.htrace</pattern>
+                  <shadedPattern>org.apache.atlas.htrace</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.configuration</pattern>
+                  <shadedPattern>org.apache.atlas.commons.configuration</shadedPattern>
+                </relocation>
+              </relocations>
             </configuration>
           </execution>
         </executions>

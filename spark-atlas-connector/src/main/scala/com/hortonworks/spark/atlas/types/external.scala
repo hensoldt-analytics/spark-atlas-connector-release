@@ -22,7 +22,6 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
@@ -32,7 +31,10 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
 
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+
 
 object external {
   // External metadata types used to link with external entities
@@ -100,14 +102,19 @@ object external {
   // ================ Kafka entities =======================
   val KAFKA_TOPIC_STRING = "kafka_topic"
 
-  def kafkaToEntity(cluster: String, topicName: String): Seq[AtlasEntity] = {
+  def kafkaToEntity(cluster: String, topic: KafkaTopicInformation): Seq[AtlasEntity] = {
+    val topicName = topic.topicName.toLowerCase
+    val clusterName = topic.clusterName match {
+      case Some(customName) => customName
+      case None => cluster
+    }
+
     val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
-    kafkaEntity.setAttribute("qualifiedName",
-      topicName.toLowerCase + '@' + cluster)
-    kafkaEntity.setAttribute("name", topicName.toLowerCase)
-    kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
-    kafkaEntity.setAttribute("uri", topicName.toLowerCase)
-    kafkaEntity.setAttribute("topic", topicName.toLowerCase)
+    kafkaEntity.setAttribute("qualifiedName", topicName + '@' + clusterName)
+    kafkaEntity.setAttribute("name", topicName)
+    kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, clusterName)
+    kafkaEntity.setAttribute("uri", topicName)
+    kafkaEntity.setAttribute("topic", topicName)
     Seq(kafkaEntity)
   }
 
@@ -132,6 +139,7 @@ object external {
     dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
     dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
+    dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity)
   }
 
@@ -183,7 +191,7 @@ object external {
 
       entity.setAttribute("qualifiedName",
         hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
-      entity.setAttribute("name", struct.name)
+      entity.setAttribute("name", struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("comment", struct.getComment())
       entity
@@ -209,9 +217,10 @@ object external {
   }
 
   def hiveTableToEntities(
-      tableDefinition: CatalogTable,
+      tblDefination: CatalogTable,
       cluster: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefination)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val table = tableDefinition.identifier.table
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
@@ -228,8 +237,8 @@ object external {
       hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
     tblEntity.setAttribute("name", table)
     tblEntity.setAttribute("owner", tableDefinition.owner)
+    tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
-    tblEntity.setAttribute("lastAccessTime", new Date(tableDefinition.lastAccessTime))
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("sd", sdEntities.head)
@@ -239,5 +248,61 @@ object external {
     tblEntity.setAttribute("columns", schemaEntities.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+
+  def hiveTableToEntitiesForAlterTable(
+      tblDefination: CatalogTable,
+      cluster: String,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val typesToPick = Seq(HIVE_TABLE_TYPE_STRING, HIVE_COLUMN_TYPE_STRING)
+    val entities = hiveTableToEntities(tblDefination, cluster, mockDbDefinition)
+
+    val dbEntity = entities.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
+    val sdEntity = entities.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
+    val tableEntity = entities.filter(e => e.getTypeName.equals(HIVE_TABLE_TYPE_STRING)).head
+
+    // override attribute with reference - Atlas should already have these entities
+    tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    entities.filter(e => typesToPick.contains(e.getTypeName))
+  }
+
+  // ================== Hive entities (Hive Warehouse Connector) =====================
+  val HWC_TABLE_TYPE_STRING = "hive_table"
+  val HWC_DB_TYPE_STRING = "hive_db"
+  val HWC_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
+
+  def hwcTableUniqueAttribute(
+      cluster: String,
+      db: String,
+      tableName: String): String = {
+    s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
+  }
+
+  def hwcTableToEntities(
+      db: String,
+      table: String,
+      cluster: String): Seq[AtlasEntity] = {
+
+    val dbEntity = new AtlasEntity(HWC_DB_TYPE_STRING)
+    dbEntity.setAttribute("qualifiedName",
+      hiveDbUniqueAttribute(cluster, db.toLowerCase))
+    dbEntity.setAttribute("name", db.toLowerCase)
+
+    val sdEntity = new AtlasEntity(HWC_STORAGEDESC_TYPE_STRING)
+    sdEntity.setAttribute("qualifiedName",
+      hiveStorageDescUniqueAttribute(cluster, db, table))
+
+    val tblEntity = new AtlasEntity(HWC_TABLE_TYPE_STRING)
+    tblEntity.setAttribute("qualifiedName",
+      hiveTableUniqueAttribute(cluster, db, table))
+    tblEntity.setAttribute("name", table)
+    tblEntity.setAttribute("db",
+      AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tblEntity.setAttribute("sd",
+      AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    Seq(tblEntity)
   }
 }
