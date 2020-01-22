@@ -20,7 +20,6 @@ package com.hortonworks.spark.atlas.types
 import java.nio.file.Files
 
 import org.apache.atlas.{AtlasClient, AtlasConstants}
-import org.apache.spark.sql.types._
 import org.scalatest.{FunSuite, Matchers}
 import com.hortonworks.spark.atlas._
 
@@ -28,7 +27,6 @@ class AtlasExternalEntityUtilsSuite
   extends FunSuite
   with Matchers
   with WithRemoteHiveMetastoreServiceSupport {
-  import TestUtils._
 
   private var hiveAtlasEntityUtils: AtlasEntityUtils = _
 
@@ -42,20 +40,6 @@ class AtlasExternalEntityUtilsSuite
   override def afterAll(): Unit = {
     hiveAtlasEntityUtils = null
     super.afterAll()
-  }
-
-  test("convert table to hive reference when remote HMS is set") {
-    val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
-    val sd = createStorageFormat()
-    val schema = new StructType()
-      .add("user", StringType, false)
-      .add("age", IntegerType, true)
-    val tableDefinition = createTable("db1", "tbl1", schema, sd, true)
-
-    val tableEntity = hiveAtlasEntityUtils.tableToEntity(tableDefinition, Some(dbDefinition))
-    assert(tableEntity.isInstanceOf[SACAtlasEntityReference])
-    tableEntity.typeName should be (external.HIVE_TABLE_TYPE_STRING)
-    tableEntity.qualifiedName should be (s"db1.tbl1@${hiveAtlasEntityUtils.clusterName}")
   }
 
   test("convert path to entity") {

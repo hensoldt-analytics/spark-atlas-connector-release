@@ -56,11 +56,9 @@ trait AtlasEntityUtils extends Logging {
   def tableToEntity(
       tableDefinition: CatalogTable,
       mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
-    if (SparkUtils.usingRemoteMetastoreService()) {
-      external.hiveTableToReference(tableDefinition, clusterName, mockDbDefinition)
-    } else {
-      internal.sparkTableToEntity(tableDefinition, clusterName, mockDbDefinition)
-    }
+    // For HDP version lines, we just leverage Spark models instead of relying on HMS Atlas Hook,
+    // given HMS Atlas Hook is not supported as of now.
+    internal.sparkTableToEntity(tableDefinition, clusterName, mockDbDefinition)
   }
 
   def sparkTableToEntity(

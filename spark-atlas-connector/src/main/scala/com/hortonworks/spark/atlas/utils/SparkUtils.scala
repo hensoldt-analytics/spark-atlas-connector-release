@@ -64,11 +64,6 @@ object SparkUtils extends Logging {
     sparkSession.sparkContext.getConf.get("spark.sql.catalogImplementation", "in-memory") == "hive"
   }
 
-  def usingRemoteMetastoreService(mockHiveConf: Option[Configuration] = None): Boolean = {
-    val conf = mockHiveConf.getOrElse(hiveConf)
-    isHiveEnabled() && conf.getTrimmed("hive.metastore.uris", "").nonEmpty
-  }
-
   /**
    * Identify a unique qualified prefix based on how catalog is used. This is to differentiate
    * multiple same-name DBs/tables in Atlas graph store when we have multiple catalogs/metastores.

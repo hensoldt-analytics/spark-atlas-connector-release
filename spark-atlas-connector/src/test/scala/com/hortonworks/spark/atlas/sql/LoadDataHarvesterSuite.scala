@@ -107,7 +107,7 @@ class LoadDataHarvesterWithRemoteHMSSuite
 
   override def getSparkSession: SparkSession = sparkSession
 
-  override def expectSparkTableModels: Boolean = false
+  override def expectSparkTableModels: Boolean = true
 
   override def getDbName: String = dbName
 }

@@ -123,5 +123,5 @@ class CreateViewHarvesterWithRemoteHMSSuite
 
   override protected def getDbName: String = dbName
 
-  override protected def expectSparkTableModels: Boolean = false
+  override protected def expectSparkTableModels: Boolean = true
 }
