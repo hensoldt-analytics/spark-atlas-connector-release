@@ -1,5 +1,10 @@
 [![Build Status](https://travis-ci.org/hortonworks-spark/spark-atlas-connector.svg?branch=atlas-1.1)](https://travis-ci.org/hortonworks-spark/spark-atlas-connector)
 
+NOTE
+===
+
+This version is customized for specific customer, and diverged heavily with other HDP versions. DO NOT USE this version as baseline of any general HDP distributions.
+
 Spark Atlas Connector
 ===
 
@@ -101,18 +106,8 @@ When Spark application is started, it will transparently track the execution pla
 Spark models vs Hive models
 ====
 
-SAC classifies table related entities with two different kind of models: Spark / Hive.
-
-We decided to skip sending create events for Hive tables managed by HMS to avoid duplication of those events from Atlas hook for Hive . For Hive entities, Atlas relies on Atlas hook for Hive as the source of truth.
-
-SAC assumes table entities are being created in Hive side and just refers these entities via object id if below conditions are true:
-
-* SparkSession.builder.enableHiveSupport is set
-* The value of "hive.metastore.uris" is set to non-empty
-
-For other cases, SAC will create table related entities as Spark models.
-
-One exceptional case is HWC - for HWC source and/or sink, SAC will not create table related entities and always refer to Hive table entities via object id.
+This version of SAC always use Spark models, and create table related entities directly.
+One exceptional case is HWC - for HWC datasource (source and/or sink), SAC will not create table related entities and always refer to Hive table entities via object id.
 
 Known Limitations (Design decision)
 ====
