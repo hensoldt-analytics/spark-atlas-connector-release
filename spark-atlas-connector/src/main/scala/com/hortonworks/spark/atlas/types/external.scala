@@ -22,6 +22,7 @@ import java.net.{URI, URISyntaxException}
 
 import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 import org.apache.atlas.AtlasConstants
+import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.hadoop.fs.Path
 
@@ -145,7 +146,6 @@ object external {
   val HBASE_TABLE_STRING = "hbase_table"
   val HBASE_COLUMNFAMILY_STRING = "hbase_column_family"
   val HBASE_COLUMN_STRING = "hbase_column"
-  val HBASE_TABLE_QUALIFIED_NAME_FORMAT = "%s:%s@%s"
 
   def hbaseTableToEntity(
       cluster: String,
@@ -159,18 +159,6 @@ object external {
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
 
     SACAtlasEntityWithDependencies(hbaseEntity)
-  }
-
-  private def getTableQualifiedName(
-      clusterName: String,
-      nameSpace: String,
-      tableName: String): String = {
-    if (clusterName == null || nameSpace == null || tableName == null) {
-      null
-    } else {
-      String.format(HBASE_TABLE_QUALIFIED_NAME_FORMAT, nameSpace.toLowerCase,
-        tableName.toLowerCase.substring(tableName.toLowerCase.indexOf(":") + 1), clusterName)
-    }
   }
 
   // ================ Kafka entities =======================
