@@ -25,7 +25,6 @@ import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.hadoop.fs.Path
-
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import com.hortonworks.spark.atlas.{AtlasUtils, SACAtlasEntityReference, SACAtlasEntityWithDependencies, SACAtlasReferenceable}
@@ -78,6 +77,17 @@ object external {
 
     // object entity depends on dir entity
     new SACAtlasEntityWithDependencies(objectEntity, Seq(dirEntityWithDeps))
+  }
+
+  def filesToDirEntities(files: Seq[String]): Seq[SACAtlasEntityWithDependencies] = {
+    // assume all inputs are files, not directories
+    val directories = files.map { file =>
+      val uri = resolveURI(file)
+      val fsPath = new Path(uri)
+      fsPath.getParent.toString
+    }.toSet
+
+    directories.map(pathToEntity).toSeq
   }
 
   def pathToEntity(path: String): SACAtlasEntityWithDependencies = {

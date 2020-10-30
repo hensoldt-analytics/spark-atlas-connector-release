@@ -92,15 +92,15 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       waitForBatchCompleted(query)
 
       val (queryDetails, entitySet) = processQueryDetails
-      // spark_process, path to read, path to write
-      assert(entitySet.size == 13)
+      // spark_process, dir to read, path to write
+      assert(entitySet.size == 3)
 
-      // input path and output path (11 + 1)
+      // input dir path and output path (1 + 1)
       val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
-      assert(fsEntities.size === 12)
+      assert(fsEntities.size === 2)
 
       val inputFsEntities = findFsEntities(fsEntities, srcDir)
-      assert(inputFsEntities.length === 11)
+      assert(inputFsEntities.length === 1)
 
       val outputFsEntities = findFsEntities(fsEntities, destDir)
       assert(outputFsEntities.length === 1)
@@ -268,15 +268,15 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       waitForBatchCompleted(query)
 
       val (queryDetails, entitySet) = processQueryDetails
-      // spark_process, files to read (11), topic to write
-      assert(entitySet.size == 13)
+      // spark_process, dir to read (1), topic to write
+      assert(entitySet.size == 3)
 
-      // input path and output path
+      // input dir path and output path
       val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
-      assert(fsEntities.size === 11)
+      assert(fsEntities.size === 1)
 
       val inputFsEntities = findFsEntities(fsEntities, srcDir)
-      assert(inputFsEntities.length === 11)
+      assert(inputFsEntities.length === 1)
 
       val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite,
         Some(customClusterNameForWriter))
@@ -341,8 +341,8 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       waitForBatchCompleted(query)
 
       val (queryDetails, entitySet) = processQueryDetails
-      // spark_process, file sink, topics to read group 1, 2 and 3, path to read
-      assert(entitySet.size == topicsToRead.size + 13)
+      // spark_process, file sink, topics to read group 1, 2 and 3, dir to read
+      assert(entitySet.size == topicsToRead.size + 3)
 
       val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
         topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
@@ -350,10 +350,10 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       assertEntitiesKafkaTopicType(topicsToReadWithClusterInfo, entitySet)
 
       val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
-      assert(fsEntities.size === 12)
+      assert(fsEntities.size === 2)
 
       val inputFsEntities = findFsEntities(fsEntities, srcDir)
-      assert(inputFsEntities.length === 11)
+      assert(inputFsEntities.length === 1)
 
       val outputFsEntities = findFsEntities(fsEntities, destDir)
       assert(outputFsEntities.length === 1)
@@ -362,10 +362,10 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
         val kafkaInputs = listAtlasEntitiesAsType(inputs, external.KAFKA_TOPIC_STRING)
         val fsInputs = listAtlasEntitiesAsType(inputs, external.FS_PATH_TYPE_STRING)
-          // unfortunately each batch recognizes topics which topics are having records to process
+        // unfortunately each batch recognizes topics which topics are having records to process
         // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
         assertEntitiesAreSubsetOfTopics(topicsToReadWithClusterInfo, kafkaInputs)
-        assertEntitiesFsType(Map(srcDir -> 11), fsInputs.toSet)
+        assertEntitiesFsType(Map(srcDir -> 1), fsInputs.toSet)
       }, outputs => {
         assert(outputs.toSet === outputFsEntities.toSet)
       })
@@ -422,8 +422,8 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       waitForBatchCompleted(query)
 
       val (queryDetails, entitySet) = processQueryDetails
-      // spark_process, write topic, topics to read group 1, 2 and 3, path to read
-      assert(entitySet.size == topicsToRead.size + 13)
+      // spark_process, write topic, topics to read group 1, 2 and 3, dir to read
+      assert(entitySet.size == topicsToRead.size + 3)
 
       val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
         topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
@@ -435,7 +435,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       assertEntitiesKafkaTopicType(topicsWithClusterInfo, entitySet)
 
       val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
-      assert(fsEntities.size === 11)
+      assert(fsEntities.size === 1)
 
       val inputFsEntities = findFsEntities(fsEntities, srcDir)
       assert(inputFsEntities === fsEntities)
@@ -447,7 +447,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
         // unfortunately each batch recognizes topics which topics are having records to process
         // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
         assertEntitiesAreSubsetOfTopics(topicsToReadWithClusterInfo, kafkaInputs)
-        assertEntitiesFsType(Map(srcDir -> 11), fsInputs.toSet)
+        assertEntitiesFsType(Map(srcDir -> 1), fsInputs.toSet)
       }, outputs => {
         assertEntitiesAreSubsetOfTopics(Seq(topicToWriteWithClusterInfo), outputs)
       })

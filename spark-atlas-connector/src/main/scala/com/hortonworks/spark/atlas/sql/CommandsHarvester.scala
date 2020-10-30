@@ -246,7 +246,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case v: View => Seq(tableToEntity(v.desc))
       case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
         catalogTable.map(tbl => Seq(tableToEntity(tbl))).getOrElse(
-          fileRelation.inputFiles.flatMap(file => Seq(external.pathToEntity(file))).toSeq)
+          external.filesToDirEntities(fileRelation.inputFiles))
       case a: AnalysisBarrier => a.child match {
         case SHCEntities(shcEntities) => Seq(shcEntities)
         case HWCEntities(hwcEntities) => Seq(hwcEntities)
@@ -259,7 +259,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             case v: View => Seq(tableToEntity(v.desc))
             case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
               catalogTable.map(tbl => Seq(tableToEntity(tbl))).getOrElse(
-                fileRelation.inputFiles.flatMap(file => Seq(external.pathToEntity(file))).toSeq)
+                external.filesToDirEntities(fileRelation.inputFiles))
             case KafkaEntities(kafkaEntities) => kafkaEntities
             case _ => Seq.empty
           }
@@ -287,7 +287,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       case f: FileSourceScanExec =>
         f.tableIdentifier.map(tbl => Seq(prepareEntity(tbl))).getOrElse(
-          f.relation.location.inputFiles.flatMap(file => Seq(external.pathToEntity(file))).toSeq)
+          external.filesToDirEntities(f.relation.location.inputFiles))
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
       case KafkaEntities(kafkaEntities) => kafkaEntities

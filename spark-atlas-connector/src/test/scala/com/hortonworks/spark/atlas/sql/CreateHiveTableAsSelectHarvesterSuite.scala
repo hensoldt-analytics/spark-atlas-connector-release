@@ -146,8 +146,9 @@ abstract class BaseCreateHiveTableAsSelectHarvesterSuite
 
   test("CREATE TABLE dest AS SELECT [] FROM directory") {
     val destTblName = "dest4_" + Random.nextInt(100000)
-    val path =
-      new File(this.getClass.getClassLoader.getResource("users.parquet").toURI).getAbsolutePath
+    val file = new File(this.getClass.getClassLoader.getResource("users.parquet").toURI)
+    val path = file.getAbsolutePath
+    val dirPath = file.getParentFile.getAbsolutePath
 
     val qe = _spark.sql(s"CREATE TABLE $destTblName AS SELECT * " +
       s"FROM parquet.`$path`").queryExecution
@@ -168,7 +169,7 @@ abstract class BaseCreateHiveTableAsSelectHarvesterSuite
       pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
     }, inputs => {
       inputs.size should be (1)
-      assertFsEntity(inputs.head, path)
+      assertFsEntity(inputs.head, dirPath)
     }, _ => {})
   }
 }

@@ -147,7 +147,7 @@ class MLPipelineEventProcessor(
       case l: LogicalRelation =>
         isFiles = true
         l.relation match {
-          case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+          case r: FileRelation => external.filesToDirEntities(r.inputFiles)
           case _ => Seq.empty
         }
       case e =>

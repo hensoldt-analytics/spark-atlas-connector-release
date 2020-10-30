@@ -18,8 +18,9 @@
 package com.hortonworks.spark.atlas.sql
 
 import java.io.{BufferedWriter, File, FileWriter}
+import java.net.URI
 import java.nio.file.{Files, Path}
-import java.util.Locale
+import java.util.{Locale, UUID}
 
 import com.hortonworks.spark.atlas.sql.testhelper._
 import com.hortonworks.spark.atlas.types.{external, metadata}
@@ -68,53 +69,69 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     atlasClient.clearEntities()
   }
 
-  test("Read csv file and save as table") {
-    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+  test("Read a bunch of csv files and save as table") {
+    withTempDir { dir =>
+      // we'll distribute files among 2 depths of directories
+      // let's allow some inefficiencies on recreating same File instance for the same directory
+      // as this is just for testing...
+      val dirs = Seq(
+        new File(dir, "A"),
+        new File(new File(dir, "A"), "A1"),
+        new File(dir, "B"),
+        new File(new File(dir, "B"), "B1"))
+      val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")
+      dirs.foreach { dir =>
+        Files.createDirectories(dir.toPath)
+        (0 to 10).foreach { _ => writeCSVFilesToDirectory(dir, csvContent) }
+      }
 
-    val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")
-    val tempFile: Path = writeCSVtextToTempFile(csvContent)
+      val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
-    val rand = new scala.util.Random()
-    val outputTableName = "app_details_" + rand.nextInt(1000000000)
+      // we're using glob path
+      val rand = new scala.util.Random()
+      val outputTableName = "app_details_" + rand.nextInt(1000000000)
 
-    val df = spark.read.csv(tempFile.toAbsolutePath.toString)
-    df.write.saveAsTable(outputTableName)
+      val df = spark.read.csv(dir.getAbsolutePath + "/*/*")
+      df.write.saveAsTable(outputTableName)
 
-    val queryDetail = testHelperQueryListener.queryDetails.last
-    planProcessor.process(queryDetail)
-    val entities = atlasClient.createdEntities
+      val queryDetail = testHelperQueryListener.queryDetails.last
+      planProcessor.process(queryDetail)
+      val entities = atlasClient.createdEntities
 
-    val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
-    assertTableEntity(tableEntity, outputTableName)
+      val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
+      assertTableEntity(tableEntity, outputTableName)
 
-    // we're expecting one file system entities: input file
-    val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
-    assert(fsEntities.size === 1)
+      // we're expecting one file system entities: input file
+      val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 4)
 
-    val databaseEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
-    assertDatabaseEntity(databaseEntity, tableEntity, outputTableName)
+      val databaseEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
+      assertDatabaseEntity(databaseEntity, tableEntity, outputTableName)
 
-    // input file
-    // this code asserts on runtime that one of fs entity matches against source path
-    val sourcePath = tempFile.toAbsolutePath.toString
-    val inputFsEntity = fsEntities.find { p =>
-      getStringAttribute(p, "name").toLowerCase(Locale.ROOT) == sourcePath.toLowerCase(Locale.ROOT)
-    }.get
-    assertInputFsEntity(inputFsEntity, sourcePath)
+      // input directories
+      val inputFsEntities = dirs.map { dir =>
+        val srcPath = dir.toPath.toAbsolutePath.toString
+        val inputFsEntity = fsEntities.find { p =>
+          getStringAttribute(p, "name").toLowerCase(Locale.ROOT) == srcPath.toLowerCase(Locale.ROOT)
+        }.get
+        assertInputFsEntity(inputFsEntity, srcPath)
+        inputFsEntity
+      }
 
-    // storage description
-    val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
-    assertStorageDefinitionEntity(storageEntity, tableEntity)
+      // storage description
+      val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
+      assertStorageDefinitionEntity(storageEntity, tableEntity)
 
-    val locationString = getStringAttribute(storageEntity, "location")
-    assert(locationString != null && locationString.nonEmpty)
-    assert(locationString.contains("spark-warehouse"))
-    assert(locationString.contains(outputTableName))
+      val locationString = getStringAttribute(storageEntity, "location")
+      assert(locationString != null && locationString.nonEmpty)
+      assert(locationString.contains("spark-warehouse"))
+      assert(locationString.contains(outputTableName))
 
-    // check for 'spark_process'
-    validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
-      AtlasUtils.entitiesToReferences(Seq(inputFsEntity)),
-      AtlasUtils.entitiesToReferences(Seq(tableEntity)))
+      // check for 'spark_process'
+      validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
+        AtlasUtils.entitiesToReferences(inputFsEntities),
+        AtlasUtils.entitiesToReferences(Seq(tableEntity)))
+    }
   }
 
   test("Create external table against JSON files") {
@@ -149,55 +166,57 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Save Spark table to Kafka via df.save()") {
-    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+    withTempDir { dir =>
+      val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
-    val rand = new scala.util.Random()
-    val inputTableName = "test_spark_table_" + rand.nextInt(1000000000)
-    val outputTopicName = "test_spark_topic_" + rand.nextInt(1000000000)
+      val rand = new scala.util.Random()
+      val inputTableName = "test_spark_table_" + rand.nextInt(1000000000)
+      val outputTopicName = "test_spark_topic_" + rand.nextInt(1000000000)
 
-    val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")
-    val tempFile: Path = writeCSVtextToTempFile(csvContent)
+      val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")
+      val tempFile: Path = writeCSVFilesToDirectory(dir, csvContent)
 
-    val df = spark.read.csv(tempFile.toAbsolutePath.toString)
-    df.write.saveAsTable(inputTableName)
+      val df = spark.read.csv(tempFile.toAbsolutePath.toString)
+      df.write.saveAsTable(inputTableName)
 
-    // we don't want to check above queries, so reset the entities in listener
-    testHelperQueryListener.clear()
+      // we don't want to check above queries, so reset the entities in listener
+      testHelperQueryListener.clear()
 
-    val customClusterName = "customCluster"
+      val customClusterName = "customCluster"
 
-    spark
-      .sql(s"select * from $inputTableName")
-      .selectExpr("cast(_c0 as String) AS value")
-      .write
-      .format("kafka")
-      .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
-      .option("topic", outputTopicName)
-      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
-      .save()
+      spark
+        .sql(s"select * from $inputTableName")
+        .selectExpr("cast(_c0 as String) AS value")
+        .write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
+        .option("topic", outputTopicName)
+        .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
+        .save()
 
-    val queryDetail = testHelperQueryListener.queryDetails.last
-    planProcessor.process(queryDetail)
+      val queryDetail = testHelperQueryListener.queryDetails.last
+      planProcessor.process(queryDetail)
 
-    val entities = atlasClient.createdEntities
+      val entities = atlasClient.createdEntities
 
-    // We already have validations for table-relevant entities in other UTs,
-    // so minimize validation here.
+      // We already have validations for table-relevant entities in other UTs,
+      // so minimize validation here.
 
-    val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
-    assertTableEntity(tableEntity, inputTableName)
+      val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
+      assertTableEntity(tableEntity, inputTableName)
 
-    // kafka topic
-    val outputKafkaEntity = getOnlyOneEntity(entities, external.KAFKA_TOPIC_STRING)
-    val expectedTopics = Seq(
-      KafkaTopicInformation(outputTopicName, Some(customClusterName))
-    )
-    assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
+      // kafka topic
+      val outputKafkaEntity = getOnlyOneEntity(entities, external.KAFKA_TOPIC_STRING)
+      val expectedTopics = Seq(
+        KafkaTopicInformation(outputTopicName, Some(customClusterName))
+      )
+      assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
 
-    // check for 'spark_process'
-    validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
-      AtlasUtils.entitiesToReferences(Seq(tableEntity)),
-      AtlasUtils.entitiesToReferences(Seq(outputKafkaEntity)))
+      // check for 'spark_process'
+      validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
+        AtlasUtils.entitiesToReferences(Seq(tableEntity)),
+        AtlasUtils.entitiesToReferences(Seq(outputKafkaEntity)))
+    }
   }
 
   test("Read Kafka topics with various options of subscription " +
@@ -326,17 +345,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
       AtlasUtils.entitiesToReferences(outputEntities))
   }
 
-  private def writeCSVtextToTempFile(csvContent: String) = {
-    val tempFile = Files.createTempFile("spark-atlas-connector-csv-temp", ".csv")
-
-    // remove temporary file in shutdown
-    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
-      new Runnable {
-        override def run(): Unit = {
-          Files.deleteIfExists(tempFile)
-        }
-      }, 10)
-
+  private def writeCSVFilesToDirectory(dir: File, csvContent: String): Path = {
+    val tempFile = Files.createTempFile(dir.toPath, "spark-atlas-connector-csv-temp", ".csv")
     val bw = new BufferedWriter(new FileWriter(tempFile.toFile))
     bw.write(csvContent)
     bw.close()
@@ -407,8 +417,9 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   private def assertInputFsEntity(fsEntity: AtlasEntity, sourcePath: String): Unit = {
     assertPathsEquals(getStringAttribute(fsEntity, "name"), sourcePath)
     assertPathsEquals(getStringAttribute(fsEntity, "path"), sourcePath)
-    assertPathsEquals(getStringAttribute(fsEntity, "qualifiedName"),
-      "file://" + sourcePath)
+    val qualName = getStringAttribute(fsEntity, "qualifiedName")
+    // this is to avoid the mismatch between 'file:/' vs 'file:///'
+    assertPathsEquals(new URI(qualName).getPath, sourcePath)
   }
 
   private def assertPathsEquals(path1: String, path2: String): Unit = {
